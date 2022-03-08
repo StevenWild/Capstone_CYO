@@ -1,30 +1,241 @@
 ---
-title: "Capstone Project"
+title: "Capstone Project- Choose Your Own"
 author: "Steven Wild"
-date: "06/03/2022"
-output: pdf_document
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: html_document
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
+# Horse Colic Dataset
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+The report is organised into the following sections:
+  
+1. Introduction 
+     1. Variable description
+2. Analysis
+     1. Data download and preparation
+     2. 
+     2. Naive model
+     3. Movie effects model
+     4. User effects model
+     5. Year effects model
+     6. Genre effects model
+     7. Penalised least squares / tuning parameters
+3. Results
+4. Conclusion.
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+# 1  Introduction
 
-```{r cars}
-summary(cars)
+This report forms a part of the project submission for the HarvardX PH125.9x course : Data Science: Capstone.
+The aim of the project is to develop a model, using machine learning techniques, to predict the survival of horses with colic, based on a number of medical observations.
+
+The data "Horse Colic Data Set" is based on the data from the UCI Machine Learning Repository at this address   [link](http://archive.ics.uci.edu/ml/datasets/Horse+Colic)  
+
+The version of the data used comes from a sub-set of original and can be found here [link](https://www.kaggle.com/uciml/horse-colic)  
+
+The data has 299 sets of observations using 28 attributes, a mix of continuous, discrete and nominal, with approximately 30% of the values missing.
+A copy of the data, in "CSV" format has been included in the Git repository link together with the ".R" script file, the ".RMD" report files and this ".PDF" copy of the report.
+
+
+## 1.1  Variable description
+
+the variables described in the table below are from a DATADICT file included with the dataset
+
+Variable name | Description
+--------| ------------
+Surgery | 1 = Yes, it had surgery 2 = It was treated without surgery
+Age | 1 = Adult horse 2 = Young (< 6 months) 
+Hospital Number | numeric id or the case number assigned to the horse (may not be unique if the horse is treated > 1 time) 
+Rectal temperature | - linear - in degrees celsius. - An elevated temp may occur due to infection. - temperature may be reduced when the animal is in late shock - normal temp is 37.8 - this parameter will usually change as the problem progresses, eg. may start out normal, then become elevated because of the lesion, passing back through the normal range as the horse goes into shock 
+pulse | linear - the heart rate in beats per minute - is a reflection of the heart condition: 30 -40 is normal for adults - rare to have a lower than normal rate although athletic horses may have a rate of 20-25 - animals with painful lesions or suffering from circulatory shock may have an elevated heart rate 
+Respiratory rate | linear - normal rate is 8 to 10 - usefulness is doubtful due to the great fluctuations 
+Temperature of extremities | a subjective indication of peripheral circulation - possible values: 1 = Normal 2 = Warm 3 = Cool 4 = Cold - cool to cold extremities indicate possible shock - hot extremities should correlate with an elevated rectal temp. 
+Peripheral pulse | subjective - possible values are: 1 = normal 2 = increased 3 = reduced 4 = absent - normal or increased p.p. are indicative of adequate circulation while reduced or absent indicate poor perfusion 
+Mucous membranes | a subjective measurement of colour - possible values are: 1 = normal pink 2 = bright pink 3 = pale pink 4 = pale cyanotic 5 = bright red / injected 6 = dark cyanotic - 1 and 2 probably indicate a normal or slightly increased circulation - 3 may occur in early shock - 4 and 6 are indicative of serious circulatory compromise - 5 is more indicative of a septicemia 
+Capillary refill time | a clinical judgment. The longer the refill, the poorer the circulation - possible values 1 = < 3 seconds 2 = >= 3 seconds 
+Pain | a subjective judgment of the horse's pain level - possible values: 1 = alert, no pain 2 = depressed 3 = intermittent mild pain 4 = intermittent severe pain 5 = continuous severe pain - should NOT be treated as a ordered or discrete variable! - In general, the more painful, the more likely it is to require surgery - prior treatment of pain may mask the pain level to some extent 
+Peristalsis | an indication of the activity in the horse's gut. As the gut becomes more distended or the horse becomes more toxic, the activity decreases - possible values: 1 = hypermotile 2 = normal 3 = hypomotile 4 = absent 
+Abdominal distension | An IMPORTANT parameter. - possible values 1 = none 2 = slight 3 = moderate 4 = severe - an animal with abdominal distension is likely to be painful and have reduced gut motility. - a horse with severe abdominal distension is likely to require surgery just tio relieve the pressure 
+Nasogastric tube | this refers to any gas coming out of the tube - possible values: 1 = none 2 = slight 3 = significant - a large gas cap in the stomach is likely to give the horse discomfort 
+Nasogastric reflux | possible values 1 = none 2 = > 1 liter 3 = < 1 liter - the greater amount of reflux, the more likelihood that there is some serious obstruction to the fluid passage from the rest of the intestine 
+Nasogastric reflux PH | linear - scale is from 0 to 14 with 7 being neutral - normal values are in the 3 to 4 range 
+Rectal examination - feces | possible values 1 = normal 2 = increased 3 = decreased 4 = absent - absent feces probably indicates an obstruction 
+Abdomen | possible values 1 = normal 2 = other 3 = firm feces in the large intestine 4 = distended small intestine 5 = distended large intestine - 3 is probably an obstruction caused by a mechanical impaction and is normally treated medically - 4 and 5 indicate a surgical lesion 
+Packed cell volume | linear - the # of red cells by volume in the blood - normal range is 30 to 50. The level rises as the circulation becomes compromised or as the animal becomes dehydrated. 
+Total protein | linear - normal values lie in the 6-7.5 (gms/dL) range - the higher the value the greater the dehydration 
+Abdominocentesis appearance | a needle is put in the horse's abdomen and fluid is obtained from the abdominal cavity - possible values: 1 = clear 2 = cloudy 3 = serosanguinous - normal fluid is clear while cloudy or serosanguinous indicates a compromised gut 
+Abdomcentesis total protein | linear - the higher the level of protein the more likely it is to have a compromised gut. Values are in gms/dL 
+Outcome | what eventually happened to the horse? - possible values: 1 = lived 2 = died 3 = was euthanized 
+Surgical lesion? | retrospectively, was the problem (lesion) surgical? - all cases are either operated upon or autopsied so that this value and the lesion type are always known - possible values: 1 = Yes 2 = No 
+Type of lesion | Attribute 25, 26 and 27 - first number is site of lesion 1 = gastric 2 = sm intestine 3 = lg colon 4 = lg colon and cecum 5 = cecum 6 = transverse colon 7 = retum/descending colon 8 = uterus 9 = bladder 11 = all intestinal sites 00 = none - second number is type 1 = simple 2 = strangulation 3 = inflammation 4 = other - third number is subtype 1 = mechanical 2 = paralytic 0 = n/a - fourth number is specific code 1 = obturation 2 = intrinsic 3 = extrinsic 4 = adynamic 5 = volvulus/torsion 6 = intussuption 7 = thromboembolic 8 = hernia 9 = lipoma/slenic incarceration 10 = displacement 0 = n/a 
+Cp_data | is pathology data present for this case? 1 = Yes 2 = No - this variable is of no significance since pathology data is not included or collected for these cases
+
+# 2  Analysis
+
+## 2.1  Data download and preparation
+
+The following code installs the required packages if required and loads the CSV file from the working directory.
+
+```{r download and import, message=FALSE, warning=TRUE}
+#Install and attach required packages
+if(!require(tidyverse)) install.packages("tidyverse", repos = "http://cran.us.r-project.org")
+if(!require(caret)) install.packages("caret", repos = "http://cran.us.r-project.org")
+if(!require(rpart)) install.packages("rpart", repos = "http://cran.us.r-project.org")
+if(!require(randomForest)) install.packages("randomForest", repos = "http://cran.us.r-project.org")
+
+library(tidyverse)
+library(caret)
+library(rpart)
+library(randomForest)
+
+#read csv file from working directory into a data frame df
+df <- read_csv("horse.csv")
 ```
 
-## Including Plots
+We can take an initial look at the data by viewing the first 10 rows. The column or attribute we will be trying to predict is OUTCOME by using some or all of the other attributes.    
+```{r prep1}
+#view data
+head(df)
+```
+There are 299 rows in the dataset and 28 attributes.
+The class of the variables is a mix of character and numeric data.
 
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
+```{r prep2}
+dim(df)
+sapply(df,class)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+Let us first examine the data for missing values. The website where the data was sourced noted that approximately 30% of the values were absent. We will have to decide how to remove or replace these missing values.
+
+```{r Missing values1}
+#save data frame with number of NAs per column
+col_nas <- as.data.frame(colSums(is.na(df)))
+col_nas <- col_nas %>%
+  mutate(p = row.names(col_nas)) %>%
+  setNames(c("parameters", "count_NAs"))
+
+#replace row names with numbers
+row.names(col_nas) <- 1:nrow(col_nas)
+
+#order to see where the most NAs are
+col_nas <- col_nas %>%
+  arrange(desc(parameters))
+
+#view top 20
+head(col_nas, 20)
+```
+
+We have listed the attributes with the most missing values, from the largest to smallest. As seen in the table above there are in some columns, more than 80% of the values missing. In most cases we will replace them with the mean of the non NA values for each variable. 
+
+```{r prep2}
+dim(df)
+sapply(df,class)
+```
+
+Let us first examine the data for missing values. The website where the data was sourced noted that approximately 30% of the values were absent. We will have to decide how to remove or replace these missing values.  
+
+First, we will save a copy of the dataframe in case we need to go back to our original unchanged data.
+We remove a few columns that are not relevant, using the attribute description file as our guide.
+```{r Clean data1}
+#remove columns / parameters that will be of no use to us
+#Change all columns to numeric values
+#Replace NAs with appropriate values
+
+#save to new dataframe
+df2 <- df %>%
+#cp_data indicates if pathology data is present (yes/no) / not relevant because no pathology data is included
+#remove column
+  select(-cp_data) %>%
+#replace lesion 1, 2 and 3 with one column, there were no NAs
+  mutate(lesion = ifelse(lesion_1 >0 | lesion_2 > 0 | lesion_3 > 0, 1 ,0)) %>%
+  select(-lesion_1, -lesion_2, -lesion_3) %>%
+#Changed as per column description file, no NAs
+  mutate(surgery2 = ifelse(surgery == "yes" ,1, 0)) %>%
+  select(-surgery) %>%
+#Changed as per column description file, no NAs
+  mutate(age2 = ifelse(age == "adult" ,1, 2)) %>%
+  select(-age) %>%
+#Changed as per column description file, NAs replaced below
+  mutate(temp_extrem = ifelse(temp_of_extremities == "normal" ,1 ,
+                              ifelse(temp_of_extremities == "warm" ,2,
+                                     ifelse(temp_of_extremities == "cool" ,3,
+                                            ifelse(temp_of_extremities == "cold" ,4,0))))) %>%
+  select(-temp_of_extremities) %>%
+#Changed as per column description file, NAs replaced below
+  mutate(periph_pulse = ifelse(peripheral_pulse == "normal" ,1 ,
+                              ifelse(peripheral_pulse == "increased" ,2,
+                                     ifelse(peripheral_pulse == "reduced" ,3,
+                                            ifelse(peripheral_pulse == "absent" ,4,0))))) %>%
+  select(-peripheral_pulse) %>%
+#Changed as per column description file, NAs replaced below
+  mutate(mucous_membrane2 = ifelse(mucous_membrane == "normal_pink" ,1 ,
+                               ifelse(mucous_membrane == "bright_pink" ,2,
+                                      ifelse(mucous_membrane == "pale_pink" ,3,
+                                             ifelse(mucous_membrane == "pale_cyanotic" ,4,
+                                                    ifelse(mucous_membrane == "bright_red" ,5,
+                                                           ifelse(mucous_membrane == "dark_cyanotic" ,6 ,0))))))) %>%
+  select(-mucous_membrane) %>%
+#Changed as per column description file, NAs replaced below
+  mutate(cap_refill_time = ifelse(capillary_refill_time == "less_3_sec" ,1, 2)) %>%
+  select(-capillary_refill_time) %>%
+#Changed as per column description file, NAs replaced below
+  mutate(pain2 = ifelse(pain == "alert" ,1 ,
+                                   ifelse(pain == "depressed" ,2,
+                                          ifelse(pain == "mild_pain" ,3,
+                                                 ifelse(pain == "severe_pain" ,4,
+                                                        ifelse(pain == "extreme_pain" ,5, 0)))))) %>%
+  select(-pain) %>%
+#Changed as per column description file, NAs replaced below
+  mutate(peristalsis2 = ifelse(peristalsis == "hypermotile" ,1 ,
+                               ifelse(peristalsis == "normal" ,2,
+                                      ifelse(peristalsis == "hypomotile" ,3,
+                                             ifelse(peristalsis == "absent" ,4,0))))) %>%
+  select(-peristalsis) %>%
+#Changed as per column description file, NAs replaced below
+  mutate(abdom_distention = ifelse(abdominal_distention == "none" ,1 ,
+                               ifelse(abdominal_distention == "slight" ,2,
+                                      ifelse(abdominal_distention == "moderate" ,3,
+                                             ifelse(abdominal_distention == "severe" ,4,0))))) %>%
+  select(-abdominal_distention) %>%
+#Changed as per column description file, NAs replaced below
+  mutate(nasogast_tube = ifelse(nasogastric_tube == "none" ,1 ,
+                                   ifelse(nasogastric_tube == "slight" ,2,
+                                          ifelse(nasogastric_tube == "significant" ,3,0)))) %>%
+  select(-nasogastric_tube) %>%
+#Changed as per column description file, NAs replaced below
+  mutate(nasogast_reflux = ifelse(nasogastric_reflux == "none" ,1 ,
+                                ifelse(nasogastric_reflux == "less_1_liter" ,2,
+                                       ifelse(nasogastric_reflux == "more_1_liter" ,3,0)))) %>%
+  select(-nasogastric_reflux) %>%
+#Changed as per column description file, NAs replaced below
+  mutate(rectal_exam_feces2 = ifelse(rectal_exam_feces == "normal" ,1 ,
+                               ifelse(rectal_exam_feces == "increased" ,2,
+                                      ifelse(rectal_exam_feces == "decreased" ,3,
+                                             ifelse(rectal_exam_feces == "absent" ,4,0))))) %>%
+  select(-rectal_exam_feces) %>%
+#Changed as per column description file, NAs replaced below
+  mutate(abdomen2 = ifelse(abdomen == "normal" ,1 ,
+                        ifelse(abdomen == "other" ,2,
+                               ifelse(abdomen == "firm" ,3,
+                                      ifelse(abdomen == "distend_small" ,4,
+                                             ifelse(abdomen == "distend_large" ,5, 0)))))) %>%
+  select(-abdomen) %>%
+#Changed as per column description file, NAs replaced below
+  mutate(abdomo_appear = ifelse(abdomo_appearance == "clear" ,1 ,
+                                  ifelse(abdomo_appearance == "cloudy" ,2,
+                                         ifelse(abdomo_appearance == "serosanguious" ,3,0)))) %>%
+  select(-abdomo_appearance) %>%
+#Changed to include only 2 outcomes 1 = lived or 0 = euthanised or died
+  mutate(outcome2 = ifelse(outcome == "lived" ,1 ,
+                                ifelse(outcome == "died" ,0,
+                                       ifelse(outcome == "euthanized" ,0,0)))) %>%
+  select(-outcome) %>%
+  mutate(surg_lesion = ifelse(surgical_lesion == "yes" ,1, 0)) %>%
+  select(-surgical_lesion)
+
+dim(df2)
+sapply(df2,class)
+```
