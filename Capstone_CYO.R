@@ -206,24 +206,26 @@ head(col_nas2, 20)
 
 #============================================================================
 #how does each parameter correlate with each of the others
-cor(df2)
-heatmap(cor(df2))
+#not used
+#cor(df2)
+#heatmap(cor(df2))
 
 #============================================================================
 #Visualise data
 #distribution of predictors , stratified by outcome 
+#looked at different types - settled on violin
 
 #boxplots
-df2 %>% gather(params, val, -outcome2) %>%
-  ggplot(aes(factor(outcome2), val, fill = outcome2)) + 
-  geom_boxplot() +
-  facet_wrap(~params, scales = "free", ncol = 6)
+#df2 %>% gather(params, val, -outcome2) %>%
+  #ggplot(aes(factor(outcome2), val, fill = outcome2)) + 
+  #geom_boxplot() +
+  #facet_wrap(~params, scales = "free", ncol = 6)
 
 #geom count
-df2 %>% gather(params, val, -outcome2) %>%
-  ggplot(aes(factor(outcome2), val, fill = outcome2)) + 
-  geom_count() +
-  facet_wrap(~params, scales = "free", ncol = 6)
+#df2 %>% gather(params, val, -outcome2) %>%
+  #ggplot(aes(factor(outcome2), val, fill = outcome2)) + 
+  #geom_count() +
+  #facet_wrap(~params, scales = "free", ncol = 6)
 
 #violin plot - use this one
 df2 %>% gather(params, val, -outcome2) %>%
@@ -233,23 +235,19 @@ df2 %>% gather(params, val, -outcome2) %>%
   facet_wrap(~params, scales = "free", ncol = 6)
 
 #bar count plot
-df2 %>% gather(params, val, -outcome2) %>%
-  ggplot(aes(factor(outcome2), val, fill = outcome2)) + 
-  geom_col() +
-  facet_wrap(~params, scales = "free", ncol = 6)
+#df2 %>% gather(params, val, -outcome2) %>%
+  #ggplot(aes(factor(outcome2), val, fill = outcome2)) + 
+  #geom_col() +
+  #facet_wrap(~params, scales = "free", ncol = 6)
 
 
 #============================================================================
 
 #remove parameters that wont be useful
-df3 <- df2 %>%
-  select(-hospital_number, -age2, -nasogast_tube, -peristalsis2, -surgery2) %>%
-  select(-rectal_temp, -respiratory_rate, -rectal_exam_feces2)
-
-#remove parameters that wont be useful
-df3 <- df2 %>%
-  select(outcome2, abdom_distention, temp_extrem, mucous_membrane2 )
-#total_protein, surgery2
+df2 <- df2 %>%
+  select(-hospital_number, -age2, -nasogastric_reflux_ph, -abdomo_protein) 
+# -age2, -nasogast_tube, -peristalsis2, -surgery2) %>%
+#select(-rectal_temp, -respiratory_rate, -rectal_exam_feces2)
 #============================================================================
 
 #create an index and data partition from the full dataframe to give us a training and a test dataset
@@ -258,55 +256,59 @@ test_index <- createDataPartition(df2$outcome2, times = 1, p = 0.5, list = FALSE
 test_set <- df2[test_index, ]
 train_set <- df2[-test_index, ]
 
-#duplicate to test removal of parameters
-set.seed(1)
-test_index <- createDataPartition(df3$outcome2, times = 1, p = 0.5, list = FALSE)
-test_set3 <- df3[test_index, ]
-train_set3 <- df3[-test_index, ]
-
 #============================================================================
 
 #linear regression function
-lm_func <- function(df_train, df_test){
-  fit <- df_train %>%
-    lm(outcome2 ~ ., data = .)
-  p_hat <- predict(fit, newdata = df_test)
-  y_hat <- factor(ifelse(p_hat > 0.5, 1, 2))
-  mean(y_hat == df_test$outcome2)
-}
+#lm_func <- function(df_train, df_test){
+  #fit <- df_train %>%
+    #lm(outcome2 ~ ., data = .)
+  #p_hat <- predict(fit, newdata = df_test)
+  #y_hat <- factor(ifelse(p_hat > 0.5, 1, 2))
+  #mean(y_hat == df_test$outcome2)
+#}
 
-lm_func(train_set, test_set)
-lm_func(train_set3, test_set3)
+#lm_func(train_set, test_set)
+#lm_func(train_set3, test_set3)
 
 #Guess an outcome and test the overall accuracy against the test set
+set.seed(1)
 y_hat_guess <- sample(c(0, 1), length(test_index), replace = TRUE)
 calc_acc <- mean(y_hat_guess == test_set$outcome2)
 calc_acc
-accuracy_results <- tibble(method = "Guess", Accur = calc_acc)
+accuracy_results <- tibble(method = "Guess", Accur = calc_acc, Sens = NA, Spec = NA, Prev = NA)
 
 #confusion matrix
-table(predicted = y_hat_guess, actual = test_set$outcome2)
+#table(predicted = y_hat_guess, actual = test_set$outcome2)
 #Accuracy by outcome
-test_set %>% 
-  mutate(y_hat = y_hat_guess) %>%
-  group_by(outcome2) %>% 
-  summarize(accuracy = mean(y_hat_guess == outcome2))
+#test_set %>% 
+  ##mutate(y_hat = y_hat_guess) %>%
+  #group_by(outcome2) %>% 
+  #summarize(accuracy = mean(y_hat_guess == outcome2))
 
 
 
-cm <- confusionMatrix(data = factor(y_hat_guess), reference = factor(test_set$outcome2))
-cm$overall["Accuracy"]
-cm$byClass[c("Sensitivity","Specificity", "Prevalence")]
+#cm <- confusionMatrix(data = factor(y_hat_guess), reference = factor(test_set$outcome2))
+#cm$overall["Accuracy"]
+#cm$byClass[c("Sensitivity","Specificity", "Prevalence")]
 
 
 #linear regression
+#train
 fit_lr <- train_set %>%
   lm(outcome2 ~ ., data = .)
+#predict
 p_hat_lr <- predict(fit_lr, newdata = test_set)
+#change predictions from prob to discrete and factorise
 y_hat_lr <- ifelse(p_hat_lr > 0.5, 1, 0) %>% factor()
-calc_acc <- mean(y_hat_lr == test_set$outcome2)
-calc_acc
-accuracy_results <- accuracy_results %>% add_row(tibble_row(method = "Linear regression", Accur = calc_acc))
+#test
+cm <- confusionMatrix(data = y_hat_lr, reference = factor(test_set$outcome2))
+cm$overall["Accuracy"]
+cm$byClass[c("Sensitivity","Specificity", "Prevalence")]
+#save result
+accuracy_results <- accuracy_results %>% add_row(tibble_row(method = "Linear regression",
+                                                Accur = calc_acc, Sens = cm$byClass["Sensitivity"],
+                                                Spec = cm$byClass["Specificity"]),
+                                                Prev = cm$byClass["Prevalence"])
 
 #logistic regression
 glm_fit <- train_set %>%
@@ -320,39 +322,51 @@ accuracy_results <- accuracy_results %>% add_row(tibble_row(method = "Logistic r
 
 #curse of dimensionality - multiple predictors
 #K Nearest Neighbour
-knn_fit <- knn3(outcome2 ~ ., data = train_set, k = 17)
-y_hat_knn <- predict(knn_fit, test_set, type = "prob")
-y_hat_knn1 <- ifelse(y_hat_knn[,1] > 0.5,1 ,0)
-calc_acc <- confusionMatrix(factor(y_hat_knn1), factor(test_set$outcome2))$overall["Accuracy"]
-calc_acc
-accuracy_results <- accuracy_results %>% add_row(tibble_row(method = "KNN", Accur = calc_acc))
+#select a k value first
+#ks <- seq(1, 50, 1)
+#accuracy <- map_df(ks, function(k){
+#  fit <- knn3(outcome2 ~ ., data = train_set, k = k)
+  
+  #y_hat <- predict(fit, train_set, type = "prob")
+  #y_hat <- ifelse(y_hat[,1] > 0.5,1 ,0) %>% factor()
+  #cm_train <- confusionMatrix(y_hat, factor(train_set$outcome2))
+  #train_error <- cm_train$overall["Accuracy"]
+  
+  #y_hat <- predict(fit, test_set, type = "prob")
+  #y_hat <- ifelse(y_hat[,1] > 0.5,1 ,0) %>% factor()
+  #cm_test <- confusionMatrix(y_hat, factor(test_set$outcome2))
+  #test_error <- cm_test$overall["Accuracy"]
+  
+  #tibble(k = k, train = train_error, test = test_error)
+#})
+
+#accuracy %>%
+  #ggplot(aes(k, train)) +
+  #geom_line()
+
+#use that K value in KNN
+#knn_fit <- knn3(outcome2 ~ ., data = train_set, k = 15)
+#y_hat_knn <- predict(knn_fit, test_set, type = "prob")
+#y_hat_knn1 <- ifelse(y_hat_knn[,1] > 0.5,1 ,0)
+#calc_acc <- confusionMatrix(factor(y_hat_knn1), factor(test_set$outcome2))$overall["Accuracy"]
+#calc_acc
+#accuracy_results <- accuracy_results %>% add_row(tibble_row(method = "KNN", Accur = calc_acc))
 #cm$byClass[c("Sensitivity","Specificity", "Prevalence")]
 
-ks <- seq(1, 50, 1)
-accuracy <- map_df(ks, function(k){
-  fit <- knn3(outcome2 ~ ., data = train_set, k = k)
-  
-  y_hat <- predict(fit, train_set, type = "prob")
-  y_hat <- ifelse(y_hat[,1] > 0.5,1 ,0) %>% factor()
-  cm_train <- confusionMatrix(y_hat, factor(train_set$outcome2))
-  train_error <- cm_train$overall["Accuracy"]
-  
-  y_hat <- predict(fit, test_set, type = "prob")
-  y_hat <- ifelse(y_hat[,1] > 0.5,1 ,0) %>% factor()
-  cm_test <- confusionMatrix(y_hat, factor(test_set$outcome2))
-  test_error <- cm_test$overall["Accuracy"]
-  
-  tibble(k = k, train = train_error, test = test_error)
-})
-
-accuracy %>%
-  ggplot(aes(k, train)) +
-  geom_line()
+#other knn
+train_knn <- train(outcome2 ~ ., data = train_set,
+                   tunegrid = data.frame(k = seq(1,25,2)))
+train_knn$bestTune
+y_hat_knn <- predict(train_knn, test_set, type = "raw")
+y_hat_knn1 <- ifelse(y_hat_knn > 0.5,1 ,0) %>% factor()
+calc_acc <- confusionMatrix(y_hat_knn1, factor(test_set$outcome2))$overall["Accuracy"]
+calc_acc
+accuracy_results <- accuracy_results %>% add_row(tibble_row(method = "KNN", Accur = calc_acc))
 
 #Regression trees
-fit_rt <- rpart(outcome2 ~ ., data = df2)
-plot(fit_rt, margin = 0.1)
-text(fit_rt, cex = 0.75)
+#fit_rt <- rpart(outcome2 ~ ., data = df2)
+#plot(fit_rt, margin = 0.1)
+#text(fit_rt, cex = 0.75)
 
 #Classification/decision tree
 train_rpart <- train(factor(outcome2) ~ .,
@@ -367,6 +381,17 @@ accuracy_results <- accuracy_results %>% add_row(tibble_row(method = "Classifica
 
 
 #random forest
+#determine best tuning parameter nodesize
+nodesize <- seq(1 ,25, 1)
+acc <- sapply(nodesize, function(ns){
+  train(factor(outcome2) ~ ., method = "rf", data = train_set,
+        tuneGrid = data.frame(mtry = 2),
+        nodesize = ns)$results$Accuracy
+})
+qplot(nodesize, acc)
+which.max(acc)
+
+#use that nodesize in the RF prediction
 fit_rf <- randomForest(outcome2 ~ ., data = train_set, nodesize = 9)
 #rafalib::mypar()
 #plot(fit_rf)
@@ -377,26 +402,17 @@ calc_acc
 accuracy_results <- accuracy_results %>% add_row(tibble_row(method = "Random forest", Accur = calc_acc))
 
 
-nodesize <- seq(1 ,25, 1)
-acc <- sapply(nodesize, function(ns){
-  train(factor(outcome2) ~ ., method = "rf", data = train_set,
-        tuneGrid = data.frame(mtry = 2),
-        nodesize = ns)$results$Accuracy
-})
-qplot(nodesize, acc)
-which.max(acc)
-
 accuracy_results
 #ensemble prediction
-y_hat_lr
-y_hat_glm
-y_hat_knn1 #factor
-y_hat_rpart
-y_hat_rf
+#y_hat_lr
+#y_hat_glm
+#y_hat_knn1 #factor
+#y_hat_rpart
+#y_hat_rf
 
 y_hat_ens <- as.data.frame(as.integer(y_hat_lr))
 y_hat_ens["y_hat_glm"] <- as.integer(y_hat_glm)
-y_hat_ens["y_hat_knn1"] <- as.integer(factor(y_hat_knn1))
+#y_hat_ens["y_hat_knn1"] <- as.integer(factor(y_hat_knn1))
 y_hat_ens["y_hat_rpart"] <- as.integer(y_hat_rpart)
 y_hat_ens["y_hat_rf"] <- as.integer(y_hat_rf)
 y_hat_ens$y_hat_ens <- apply(y_hat_ens,1,mean)

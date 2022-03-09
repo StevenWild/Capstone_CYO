@@ -2,7 +2,9 @@
 title: "Capstone Project- Choose Your Own"
 author: "Steven Wild"
 date: "`r format(Sys.time(), '%d %B, %Y')`"
-output: html_document
+output:
+  html_document:
+    df_print: paged
 ---
 
 ```{r setup, include=FALSE}
@@ -13,17 +15,19 @@ knitr::opts_chunk$set(echo = TRUE)
 
 The report is organised into the following sections:
   
-1. Introduction 
+1. Introduction
      1. Variable description
 2. Analysis
      1. Data download and preparation
-     2. 
-     2. Naive model
-     3. Movie effects model
-     4. User effects model
-     5. Year effects model
-     6. Genre effects model
-     7. Penalised least squares / tuning parameters
+     2. Training and test set preparation
+     3. Training / modelling methods
+        1. Random guess
+        2. Linear regression
+        3. Logistic regression
+        4. K Nearest Neighbour
+        5. Classification tree
+        6. Random forest
+        7. Ensemble
 3. Results
 4. Conclusion.
 
@@ -130,15 +134,13 @@ head(col_nas, 20)
 
 We have listed the attributes with the most missing values, from the largest to smallest. As seen in the table above there are in some columns, more than 80% of the values missing. In most cases we will replace them with the mean of the non NA values for each variable. 
 
-```{r prep2}
-dim(df)
-sapply(df,class)
-```
-
 Let us first examine the data for missing values. The website where the data was sourced noted that approximately 30% of the values were absent. We will have to decide how to remove or replace these missing values.  
 
 First, we will save a copy of the dataframe in case we need to go back to our original unchanged data.
-We remove a few columns that are not relevant, using the attribute description file as our guide.
+We remove a few columns that are not relevant, using the attribute description file as our guide.   
+
+We will changed all the columns to numeric so that they can be readily used as predictors. The code below addresses each column at a time, replacing the character entries with their replacement numeric value from the text files. we then delete the original version of the column. This was only done for the character columns.
+
 ```{r Clean data1}
 #remove columns / parameters that will be of no use to us
 #Change all columns to numeric values
@@ -238,4 +240,257 @@ df2 <- df %>%
 
 dim(df2)
 sapply(df2,class)
+```
+
+We are now down to 25 attributes having deleted 1 and consolidating 3 into 1. All the character attributes have been replaced with numeric ones, as shown in the table above.    
+
+The "Outcome" attribute which we will be trying to predict has been changed to only indicate 2 separate outcomes, "lived" == 1, and "dies" == 0. The "euthanized" option was changed to "died" as it's eventual outcome is the same.
+
+Now we can replace all the missing entries column-by-column, the ones with the NAs, with the means of the rest of the column.
+
+```{r Clean data2}
+#replace NAs/0s from process above
+
+#Temp of extremities, replace NAs with mean
+  df2$temp_extrem[is.na(df2$temp_extrem)] <- mean(df2$temp_extrem,na.rm=TRUE)
+#Peripheral pulse, replace NAs with mean
+  df2$periph_pulse[is.na(df2$periph_pulse)] <- mean(df2$periph_pulse,na.rm=TRUE)
+#Mucous membranes, replace NAs with mean
+  df2$mucous_membrane2[is.na(df2$mucous_membrane2)] <- mean(df2$mucous_membrane2,na.rm=TRUE)
+#Capillary refill time, replace NAs with mean
+  df2$cap_refill_time[is.na(df2$cap_refill_time)] <- mean(df2$cap_refill_time,na.rm=TRUE)
+#Pain level, replace NAs with mean
+  df2$pain2[is.na(df2$pain2)] <- mean(df2$pain2,na.rm=TRUE)
+#Peristalsis activity in gut, replace NAs with mean
+  df2$peristalsis2[is.na(df2$peristalsis2)] <- mean(df2$peristalsis2,na.rm=TRUE)
+#Abdominal distension, replace NAs with mean
+  df2$abdom_distention[is.na(df2$abdom_distention)] <- mean(df2$abdom_distention,na.rm=TRUE)
+#Gas coming out of nasogastric tube, replace NAs with mean
+  df2$nasogast_tube[is.na(df2$nasogast_tube)] <- mean(df2$nasogast_tube,na.rm=TRUE)
+#Nasogastric reflux, replace NAs with mean
+  df2$nasogast_reflux[is.na(df2$nasogast_reflux)] <- mean(df2$nasogast_reflux,na.rm=TRUE)
+#rectal examination - feces, replace NAs with mean
+  df2$rectal_exam_feces2[is.na(df2$rectal_exam_feces2)] <- mean(df2$rectal_exam_feces2,na.rm=TRUE)
+#abdomen, replace NAs with mean
+  df2$abdomen2[is.na(df2$abdomen2)] <- mean(df2$abdomen2,na.rm=TRUE)
+#abdomen, replace NAs with mean
+  df2$abdomo_appear[is.na(df2$abdomo_appear)] <- mean(df2$abdomo_appear,na.rm=TRUE)
+#PH of nasogastric reflux, replace NAs with mean
+  df2$nasogastric_reflux_ph[is.na(df2$nasogastric_reflux_ph)] <- mean(df2$nasogastric_reflux_ph,na.rm=TRUE)
+#abdomcentesis total protein, replace NAs with mean
+  df2$abdomo_protein[is.na(df2$abdomo_protein)] <- mean(df2$abdomo_protein,na.rm=TRUE)
+#rectal temperature, replace NAs with mean
+  df2$rectal_temp[is.na(df2$rectal_temp)] <- mean(df2$rectal_temp,na.rm=TRUE)
+#respiratory rate, replace NAs with mean
+  df2$respiratory_rate[is.na(df2$respiratory_rate)] <- mean(df2$respiratory_rate,na.rm=TRUE) 
+#total protein, replace NAs with mean
+  df2$total_protein[is.na(df2$total_protein)] <- mean(df2$total_protein,na.rm=TRUE) 
+#packed cell volume, replace NAs with mean
+  df2$packed_cell_volume[is.na(df2$packed_cell_volume)] <- mean(df2$packed_cell_volume,na.rm=TRUE) 
+#Pulse, replace NAs with mean
+  df2$pulse[is.na(df2$pulse)] <- mean(df2$pulse,na.rm=TRUE) 
+```
+
+We can now check again to see if all the NAs have been resolved. With a descending sort we see that all data is complete.
+
+```{r Clean data3}
+#check again for NAs
+#save data frame with number of NAs per column
+col_nas2 <- as.data.frame(colSums(is.na(df2)))
+col_nas2 <- col_nas2 %>%
+  mutate(p = row.names(col_nas2)) %>%
+  setNames(c("parameters", "count_NAs"))
+
+#replace row names with numbers
+row.names(col_nas2) <- 1:nrow(col_nas2)
+
+#order to see where the most NAs are
+col_nas2 <- col_nas2 %>%
+  arrange(desc(parameters))
+
+#view top 20
+head(col_nas2, 20)
+```
+
+We should have a look at the various attributes to see if there are any that we can remove that wont help us with our predictions.
+Different types of plots were looked at , but the violin plot seems to highlight the attributes that will be most useful to assist with the predictions. We will be looking for those attributes where there are marked differences in the distributions.
+
+```{r Visualise}
+#violin plot - use this one
+df2 %>% gather(params, val, -outcome2) %>%
+  ggplot(aes(factor(outcome2), val, fill = outcome2)) + 
+  geom_violin() +
+  scale_y_discrete() +
+  facet_wrap(~params, scales = "free", ncol = 6)
+```
+
+We will start with removing the "Hospital number" attribute as it does not seems as though it would be helpful to make a clear prediction. There is no clear distinction that can be made between the 2 desired outcomes from what we see in the data distribution.   
+Through observation and testing "Age", "Nasogastric_reflux_ph" and "abdomo_protein" were also removed. We now have only 20 attributes to use in our predictions.
+
+```{r Remove attributes}
+#remove parameters that wont be useful
+df2 <- df2 %>%
+  select(-hospital_number, -age2, -nasogastric_reflux_ph, -abdomo_protein) 
+```
+
+## 2.2 Training and test set preparation
+
+Our dataset can now be partitioned into a training and test set. A 50% split was decided on to ensure an even split of all values into both sets. Train_set and Test_set were created from the cleaned copy of the dataframe. A validation set was not separated from the test set.
+
+```{r partition}
+#create an index and data partition from the full dataframe to give us a training and a test dataset
+set.seed(1)
+test_index <- createDataPartition(df2$outcome2, times = 1, p = 0.5, list = FALSE)
+test_set <- df2[test_index, ]
+train_set <- df2[-test_index, ]
+```
+
+## 2.3 Training / modelling methods
+
+In this section we will try to train different machine learning models on our training set and then check them against our testing set.
+We'll save our accuracy estimates for each method into a table so we can compare our modelling at the end.
+
+Each method follows a similar pattern:
+
+      * train our model on the training set
+      * generate a set of predictions on our test set
+      * validate the predictions against the real outcom
+      * save results to table.
+      
+      
+### 2.3.1 Random guess
+
+Just to get a starting point and a feel for a random sampling estimate we will make a guess for each row in the test set and determine the accuracy, which we would expect to be around 50%.  
+
+```{r guess}
+set.seed(1)
+y_hat_guess <- sample(c(0, 1), length(test_index), replace = TRUE)
+calc_acc <- mean(y_hat_guess == test_set$outcome2)
+calc_acc
+accuracy_results <- tibble(method = "Guess", Accur = calc_acc)
+```
+
+### 2.3.2 Linear regression
+
+Our first real test will be using linear regression with R's lm function.
+
+```{r linear}
+#train
+fit_lr <- train_set %>%
+  lm(outcome2 ~ ., data = .)
+#predict
+p_hat_lr <- predict(fit_lr, newdata = test_set)
+#change predictions from prob to discrete and factorise
+y_hat_lr <- ifelse(p_hat_lr > 0.5, 1, 0) %>% factor()
+#test
+cm <- confusionMatrix(data = y_hat_lr, reference = factor(test_set$outcome2))
+cm$overall["Accuracy"]
+cm$byClass[c("Sensitivity","Specificity", "Prevalence")]
+#save result
+accuracy_results <- accuracy_results %>% add_row(tibble_row(method = "Linear regression",
+                                                Accur = calc_acc, Sens = cm$byClass["Sensitivity"],
+                                                Spec = cm$byClass["Specificity"]),
+                                                Prev = cm$byClass["Prevalence"])
+```
+
+We get an overall accuracy of 73%, much better than just guessing.
+
+### 2.3.3 Logistic regression
+
+```{r log}
+glm_fit <- train_set %>%
+  glm(outcome2 ~ ., data = ., family = "binomial")
+p_hat_glm <- predict(glm_fit, newdata = test_set, type = "response")
+y_hat_glm <- ifelse(p_hat_glm >0.5, 1, 0) %>% factor()
+calc_acc <- confusionMatrix(y_hat_glm, factor(test_set$outcome2))$overall[["Accuracy"]]
+calc_acc
+accuracy_results <- accuracy_results %>% add_row(tibble_row(method = "Logistic regression", Accur = calc_acc))
+```
+
+### 2.3.4 K Nearest Neighbour
+
+We do not know at this point which k parameter would give the lowest error 
+
+```{r knn, warning=FALSE}
+train_knn <- train(outcome2 ~ ., data = train_set,
+                   tunegrid = data.frame(k = seq(1,25,2)))
+train_knn$bestTune
+y_hat_knn <- predict(train_knn, test_set, type = "raw")
+y_hat_knn1 <- ifelse(y_hat_knn > 0.5,1 ,0) %>% factor()
+calc_acc <- confusionMatrix(y_hat_knn1, factor(test_set$outcome2))$overall["Accuracy"]
+calc_acc
+accuracy_results <- accuracy_results %>% add_row(tibble_row(method = "KNN", Accur = calc_acc))
+```
+
+
+### 2.3.5 Classification tree
+
+```{r ct}
+train_rpart <- train(factor(outcome2) ~ .,
+                     method = "rpart",
+                     tuneGrid = data.frame(cp = seq(0.0, 0.1, len = 25)),
+                     data = train_set)
+plot(train_rpart)
+y_hat_rpart <- predict(train_rpart, test_set)
+calc_acc <- confusionMatrix(y_hat_rpart, factor(test_set$outcome2))$overall[["Accuracy"]]
+calc_acc
+accuracy_results <- accuracy_results %>% add_row(tibble_row(method = "Classification tree", Accur = calc_acc))
+```
+
+### 2.3.6 Random forest
+
+```{r rf}
+#determine best tuning parameter nodesize
+nodesize <- seq(1 ,25, 1)
+acc <- sapply(nodesize, function(ns){
+  train(factor(outcome2) ~ ., method = "rf", data = train_set,
+        tuneGrid = data.frame(mtry = 2),
+        nodesize = ns)$results$Accuracy
+})
+qplot(nodesize, acc)
+which.max(acc)
+```
+
+```{r rf2, warning=FALSE}
+#use that nodesize in the RF prediction
+fit_rf <- randomForest(outcome2 ~ ., data = train_set, nodesize = 9)
+y_hat_rf <- predict(fit_rf, newdata = test_set) 
+y_hat_rf <- ifelse(y_hat_rf > 0.5,1 ,0) %>% factor()
+calc_acc <- confusionMatrix(y_hat_rf, factor(test_set$outcome2))$overall[["Accuracy"]]
+calc_acc
+accuracy_results <- accuracy_results %>% add_row(tibble_row(method = "Random forest", Accur = calc_acc))
+```
+
+### 2.3.7 Ensemble
+
+```{r ensemble}
+y_hat_ens <- as.data.frame(as.integer(y_hat_lr))
+y_hat_ens["y_hat_glm"] <- as.integer(y_hat_glm)
+y_hat_ens["y_hat_knn1"] <- as.integer(factor(y_hat_knn1))
+y_hat_ens["y_hat_rpart"] <- as.integer(y_hat_rpart)
+y_hat_ens["y_hat_rf"] <- as.integer(y_hat_rf)
+y_hat_ens$y_hat_ens <- apply(y_hat_ens,1,mean)
+y_hat_ens$y_hat_ens <- ifelse(y_hat_ens$y_hat_ens > 1.5,2 ,1)  
+y_hat_ens$y_hat_ens <- ifelse(y_hat_ens$y_hat_ens == 1,0 ,1) 
+y_hat_ens <- factor(y_hat_ens$y_hat_ens) 
+calc_acc <- mean(y_hat_ens == test_set$outcome2)
+calc_acc
+accuracy_results <- accuracy_results %>% add_row(tibble_row(method = "Ensemble", Accur = calc_acc))
+```
+
+# 3 Results
+
+```{r results}
+accuracy_results
+```
+
+# 4 Conclusion
+
+prevent over/under training
+regularisation to prevent over-fitting
+could split into validation set and tune the hyper parameters
+becasue we have very little data, comparatively speaking, we could use cross validation
+
+```{r zzz}
+
 ```
