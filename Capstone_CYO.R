@@ -251,7 +251,7 @@ df2 <- df2 %>%
 #============================================================================
 
 #create an index and data partition from the full dataframe to give us a training and a test dataset
-set.seed(1)
+set.seed(1, sample.kind="Rounding")
 test_index <- createDataPartition(df2$outcome2, times = 1, p = 0.5, list = FALSE)
 test_set <- df2[test_index, ]
 train_set <- df2[-test_index, ]
@@ -271,11 +271,11 @@ train_set <- df2[-test_index, ]
 #lm_func(train_set3, test_set3)
 
 #Guess an outcome and test the overall accuracy against the test set
-set.seed(1)
+set.seed(1, sample.kind="Rounding")
 y_hat_guess <- sample(c(0, 1), length(test_index), replace = TRUE)
 calc_acc <- mean(y_hat_guess == test_set$outcome2)
 calc_acc
-accuracy_results <- tibble(method = "Guess", Accur = calc_acc, Sens = NA, Spec = NA, Prev = NA)
+accuracy_results <- tibble(method = "Guess", Accur = calc_acc, Sens = NA, Spec = NA)
 
 #confusion matrix
 #table(predicted = y_hat_guess, actual = test_set$outcome2)
@@ -306,19 +306,27 @@ cm$overall["Accuracy"]
 cm$byClass[c("Sensitivity","Specificity", "Prevalence")]
 #save result
 accuracy_results <- accuracy_results %>% add_row(tibble_row(method = "Linear regression",
-                                                Accur = calc_acc, Sens = cm$byClass["Sensitivity"],
-                                                Spec = cm$byClass["Specificity"]),
-                                                Prev = cm$byClass["Prevalence"])
+                                                Accur = cm$overall["Accuracy"],
+                                                Sens = cm$byClass["Sensitivity"],
+                                                Spec = cm$byClass["Specificity"]))
 
 #logistic regression
+#train
 glm_fit <- train_set %>%
   glm(outcome2 ~ ., data = ., family = "binomial")
+#predict
 p_hat_glm <- predict(glm_fit, newdata = test_set, type = "response")
+#change predictions from prob to discrete and factorise
 y_hat_glm <- ifelse(p_hat_glm >0.5, 1, 0) %>% factor()
-calc_acc <- confusionMatrix(y_hat_glm, factor(test_set$outcome2))$overall[["Accuracy"]]
-calc_acc
-accuracy_results <- accuracy_results %>% add_row(tibble_row(method = "Logistic regression", Accur = calc_acc))
-#cm$byClass[c("Sensitivity","Specificity", "Prevalence")]
+#test
+cm <- confusionMatrix(data = y_hat_glm, reference = factor(test_set$outcome2))
+cm$overall["Accuracy"]
+cm$byClass[c("Sensitivity","Specificity", "Prevalence")]
+#save result
+accuracy_results <- accuracy_results %>% add_row(tibble_row(method = "Logistic regression",
+                                                            Accur = cm$overall["Accuracy"],
+                                                            Sens = cm$byClass["Sensitivity"],
+                                                            Spec = cm$byClass["Specificity"]))
 
 #curse of dimensionality - multiple predictors
 #K Nearest Neighbour
@@ -354,14 +362,24 @@ accuracy_results <- accuracy_results %>% add_row(tibble_row(method = "Logistic r
 #cm$byClass[c("Sensitivity","Specificity", "Prevalence")]
 
 #other knn
+#train
 train_knn <- train(outcome2 ~ ., data = train_set,
                    tunegrid = data.frame(k = seq(1,25,2)))
 train_knn$bestTune
-y_hat_knn <- predict(train_knn, test_set, type = "raw")
-y_hat_knn1 <- ifelse(y_hat_knn > 0.5,1 ,0) %>% factor()
-calc_acc <- confusionMatrix(y_hat_knn1, factor(test_set$outcome2))$overall["Accuracy"]
-calc_acc
-accuracy_results <- accuracy_results %>% add_row(tibble_row(method = "KNN", Accur = calc_acc))
+
+#predict
+p_hat_knn <- predict(train_knn, test_set, type = "raw")
+#change predictions from prob to discrete and factorise
+y_hat_knn <- ifelse(p_hat_knn > 0.5,1 ,0) %>% factor()
+#test
+cm <- confusionMatrix(data = y_hat_knn, reference = factor(test_set$outcome2))
+cm$overall["Accuracy"]
+cm$byClass[c("Sensitivity","Specificity", "Prevalence")]
+#save result
+accuracy_results <- accuracy_results %>% add_row(tibble_row(method = "KNN",
+                                                            Accur = cm$overall["Accuracy"],
+                                                            Sens = cm$byClass["Sensitivity"],
+                                                            Spec = cm$byClass["Specificity"]))
 
 #Regression trees
 #fit_rt <- rpart(outcome2 ~ ., data = df2)
@@ -369,19 +387,29 @@ accuracy_results <- accuracy_results %>% add_row(tibble_row(method = "KNN", Accu
 #text(fit_rt, cex = 0.75)
 
 #Classification/decision tree
+set.seed(1, sample.kind="Rounding")
+#train
 train_rpart <- train(factor(outcome2) ~ .,
                      method = "rpart",
                      tuneGrid = data.frame(cp = seq(0.0, 0.1, len = 25)),
                      data = train_set)
 plot(train_rpart)
+#predict
 y_hat_rpart <- predict(train_rpart, test_set)
-calc_acc <- confusionMatrix(y_hat_rpart, factor(test_set$outcome2))$overall[["Accuracy"]]
-calc_acc
-accuracy_results <- accuracy_results %>% add_row(tibble_row(method = "Classification tree", Accur = calc_acc))
+#test
+cm <- confusionMatrix(data = y_hat_rpart, reference = factor(test_set$outcome2))
+cm$overall["Accuracy"]
+cm$byClass[c("Sensitivity","Specificity", "Prevalence")]
+#save result
+accuracy_results <- accuracy_results %>% add_row(tibble_row(method = "Classification tree",
+                                                            Accur = cm$overall["Accuracy"],
+                                                            Sens = cm$byClass["Sensitivity"],
+                                                            Spec = cm$byClass["Specificity"]))
 
 
 #random forest
 #determine best tuning parameter nodesize
+set.seed(1, sample.kind="Rounding")
 nodesize <- seq(1 ,25, 1)
 acc <- sapply(nodesize, function(ns){
   train(factor(outcome2) ~ ., method = "rf", data = train_set,
@@ -392,34 +420,37 @@ qplot(nodesize, acc)
 which.max(acc)
 
 #use that nodesize in the RF prediction
-fit_rf <- randomForest(outcome2 ~ ., data = train_set, nodesize = 9)
-#rafalib::mypar()
-#plot(fit_rf)
-y_hat_rf <- predict(fit_rf, newdata = test_set) 
-y_hat_rf <- ifelse(y_hat_rf > 0.5,1 ,0) %>% factor()
-calc_acc <- confusionMatrix(y_hat_rf, factor(test_set$outcome2))$overall[["Accuracy"]]
-calc_acc
-accuracy_results <- accuracy_results %>% add_row(tibble_row(method = "Random forest", Accur = calc_acc))
+#train using nodesize
+fit_rf <- randomForest(outcome2 ~ ., data = train_set, nodesize = which.max(acc))
+#predict
+p_hat_rf <- predict(fit_rf, newdata = test_set)
+#change predictions from prob to discrete and factorise
+y_hat_rf <- ifelse(p_hat_rf > 0.5,1 ,0) %>% factor()
+#test
+cm <- confusionMatrix(data = y_hat_rf, reference = factor(test_set$outcome2))
+cm$overall["Accuracy"]
+cm$byClass[c("Sensitivity","Specificity", "Prevalence")]
+#save result
+accuracy_results <- accuracy_results %>% add_row(tibble_row(method = "Random forest",
+                                                            Accur = cm$overall["Accuracy"],
+                                                            Sens = cm$byClass["Sensitivity"],
+                                                            Spec = cm$byClass["Specificity"]))
 
 
-accuracy_results
-#ensemble prediction
-#y_hat_lr
-#y_hat_glm
-#y_hat_knn1 #factor
-#y_hat_rpart
-#y_hat_rf
-
-y_hat_ens <- as.data.frame(as.integer(y_hat_lr))
-y_hat_ens["y_hat_glm"] <- as.integer(y_hat_glm)
-#y_hat_ens["y_hat_knn1"] <- as.integer(factor(y_hat_knn1))
-y_hat_ens["y_hat_rpart"] <- as.integer(y_hat_rpart)
-y_hat_ens["y_hat_rf"] <- as.integer(y_hat_rf)
-y_hat_ens$y_hat_ens <- apply(y_hat_ens,1,mean)
-y_hat_ens$y_hat_ens <- ifelse(y_hat_ens$y_hat_ens > 1.5,2 ,1)  
-y_hat_ens$y_hat_ens <- ifelse(y_hat_ens$y_hat_ens == 1,0 ,1) 
-y_hat_ens <- factor(y_hat_ens$y_hat_ens) 
-calc_acc <- mean(y_hat_ens == test_set$outcome2)
-calc_acc
-accuracy_results <- accuracy_results %>% add_row(tibble_row(method = "Ensemble", Accur = calc_acc))
+#ensemble method
+#create dataframe with KNN probs
+p_hat_ens <- as.data.frame(p_hat_knn)
+p_hat_ens["p_hat_rf"] <- p_hat_rf #add random forest probs
+p_hat_ens["mean"] <- (p_hat_ens$p_hat_knn + p_hat_ens$p_hat_rf)/2 #mean out the probs
+p_hat_ens$y_hat_ens <- ifelse(p_hat_ens$mean > 0.5,1 ,0) # convert to 1 / 0
+y_hat_ens <- factor(p_hat_ens$y_hat_ens)  #factorise
+#test
+cm <- confusionMatrix(data = y_hat_ens, reference = factor(test_set$outcome2))
+cm$overall["Accuracy"]
+cm$byClass[c("Sensitivity","Specificity", "Prevalence")]
+#save result
+accuracy_results <- accuracy_results %>% add_row(tibble_row(method = "Ensemble",
+                                                            Accur = cm$overall["Accuracy"],
+                                                            Sens = cm$byClass["Sensitivity"],
+                                                            Spec = cm$byClass["Specificity"]))
 accuracy_results

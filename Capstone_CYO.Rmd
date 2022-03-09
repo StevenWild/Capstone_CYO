@@ -3,6 +3,7 @@ title: "Capstone Project- Choose Your Own"
 author: "Steven Wild"
 date: "`r format(Sys.time(), '%d %B, %Y')`"
 output:
+  pdf_document: default
   html_document:
     df_print: paged
 ---
@@ -312,8 +313,8 @@ col_nas2 <- col_nas2 %>%
 head(col_nas2, 20)
 ```
 
-We should have a look at the various attributes to see if there are any that we can remove that wont help us with our predictions.
-Different types of plots were looked at , but the violin plot seems to highlight the attributes that will be most useful to assist with the predictions. We will be looking for those attributes where there are marked differences in the distributions.
+We should have a look at the various attributes to see if there are any that we can remove that wont help us with our predictions and will just extend processing time.
+Different types of plots were looked at, but the violin plot seems to highlight the attributes that will be most useful to assist with the predictions. We will be looking for those attributes where there are marked differences in the distributions of "died" and "lived" / 0 and 1.
 
 ```{r Visualise}
 #violin plot - use this one
@@ -337,9 +338,9 @@ df2 <- df2 %>%
 
 Our dataset can now be partitioned into a training and test set. A 50% split was decided on to ensure an even split of all values into both sets. Train_set and Test_set were created from the cleaned copy of the dataframe. A validation set was not separated from the test set.
 
-```{r partition}
+```{r partition, warning=FALSE}
 #create an index and data partition from the full dataframe to give us a training and a test dataset
-set.seed(1)
+set.seed(1, sample.kind="Rounding")
 test_index <- createDataPartition(df2$outcome2, times = 1, p = 0.5, list = FALSE)
 test_set <- df2[test_index, ]
 train_set <- df2[-test_index, ]
@@ -354,20 +355,20 @@ Each method follows a similar pattern:
 
       * train our model on the training set
       * generate a set of predictions on our test set
-      * validate the predictions against the real outcom
+      * validate the predictions against the real outcome
       * save results to table.
-      
       
 ### 2.3.1 Random guess
 
 Just to get a starting point and a feel for a random sampling estimate we will make a guess for each row in the test set and determine the accuracy, which we would expect to be around 50%.  
 
-```{r guess}
-set.seed(1)
+```{r guess, warning=FALSE}
+#Guess an outcome and test the overall accuracy against the test set
+set.seed(1, sample.kind="Rounding")
 y_hat_guess <- sample(c(0, 1), length(test_index), replace = TRUE)
 calc_acc <- mean(y_hat_guess == test_set$outcome2)
 calc_acc
-accuracy_results <- tibble(method = "Guess", Accur = calc_acc)
+accuracy_results <- tibble(method = "Guess", Accur = calc_acc, Sens = NA, Spec = NA)
 ```
 
 ### 2.3.2 Linear regression
@@ -388,59 +389,98 @@ cm$overall["Accuracy"]
 cm$byClass[c("Sensitivity","Specificity", "Prevalence")]
 #save result
 accuracy_results <- accuracy_results %>% add_row(tibble_row(method = "Linear regression",
-                                                Accur = calc_acc, Sens = cm$byClass["Sensitivity"],
-                                                Spec = cm$byClass["Specificity"]),
-                                                Prev = cm$byClass["Prevalence"])
+                                                Accur = cm$overall["Accuracy"],
+                                                Sens = cm$byClass["Sensitivity"],
+                                                Spec = cm$byClass["Specificity"]))
 ```
 
-We get an overall accuracy of 73%, much better than just guessing.
+We get an overall accuracy of 72%, much better than just guessing, but our sensitivity (true positive rate "TPR") is only 62%. The specificity, or true negative rate "TNR" is 79%.
 
 ### 2.3.3 Logistic regression
 
+Next we'll apply Rs glm function to fit a logistic regression model.
+
 ```{r log}
+#train
 glm_fit <- train_set %>%
   glm(outcome2 ~ ., data = ., family = "binomial")
+#predict
 p_hat_glm <- predict(glm_fit, newdata = test_set, type = "response")
+#change predictions from prob to discrete and factorise
 y_hat_glm <- ifelse(p_hat_glm >0.5, 1, 0) %>% factor()
-calc_acc <- confusionMatrix(y_hat_glm, factor(test_set$outcome2))$overall[["Accuracy"]]
-calc_acc
-accuracy_results <- accuracy_results %>% add_row(tibble_row(method = "Logistic regression", Accur = calc_acc))
+#test
+cm <- confusionMatrix(data = y_hat_glm, reference = factor(test_set$outcome2))
+cm$overall["Accuracy"]
+cm$byClass[c("Sensitivity","Specificity", "Prevalence")]
+#save result
+accuracy_results <- accuracy_results %>% add_row(tibble_row(method = "Logistic regression",
+                                                            Accur = cm$overall["Accuracy"],
+                                                            Sens = cm$byClass["Sensitivity"],
+                                                            Spec = cm$byClass["Specificity"]))
 ```
+
+A negligible improvement on linear regression, the accuracy improves to 73%, sensitivity remains 62% and specificity increases to 80%.
 
 ### 2.3.4 K Nearest Neighbour
 
-We do not know at this point which k parameter would give the lowest error 
+We do not know at this point which k parameter, the number of neighbours, would give the lowest error so we run a sequence of values, odd numbers from 1 to 25 in our training.
 
 ```{r knn, warning=FALSE}
+#train
 train_knn <- train(outcome2 ~ ., data = train_set,
                    tunegrid = data.frame(k = seq(1,25,2)))
 train_knn$bestTune
-y_hat_knn <- predict(train_knn, test_set, type = "raw")
-y_hat_knn1 <- ifelse(y_hat_knn > 0.5,1 ,0) %>% factor()
-calc_acc <- confusionMatrix(y_hat_knn1, factor(test_set$outcome2))$overall["Accuracy"]
-calc_acc
-accuracy_results <- accuracy_results %>% add_row(tibble_row(method = "KNN", Accur = calc_acc))
+#predict
+p_hat_knn <- predict(train_knn, test_set, type = "raw")
+#change predictions from prob to discrete and factorise
+y_hat_knn <- ifelse(p_hat_knn > 0.5,1 ,0) %>% factor()
+#test
+cm <- confusionMatrix(data = y_hat_knn, reference = factor(test_set$outcome2))
+cm$overall["Accuracy"]
+cm$byClass[c("Sensitivity","Specificity", "Prevalence")]
+#save result
+accuracy_results <- accuracy_results %>% add_row(tibble_row(method = "KNN",
+                                                            Accur = cm$overall["Accuracy"],
+                                                            Sens = cm$byClass["Sensitivity"],
+                                                            Spec = cm$byClass["Specificity"]))
 ```
 
+We have managed to improve our accuracy to 79% as well as our sensitivity to 67% with an increase in specificity to 87%.
 
 ### 2.3.5 Classification tree
 
-```{r ct}
+With our decision tree we also try to select the best tuning parameter by running a sequence of values. 
+
+```{r ct, warning=FALSE}
+set.seed(1, sample.kind="Rounding")
+#train
 train_rpart <- train(factor(outcome2) ~ .,
                      method = "rpart",
                      tuneGrid = data.frame(cp = seq(0.0, 0.1, len = 25)),
                      data = train_set)
 plot(train_rpart)
+#predict
 y_hat_rpart <- predict(train_rpart, test_set)
-calc_acc <- confusionMatrix(y_hat_rpart, factor(test_set$outcome2))$overall[["Accuracy"]]
-calc_acc
-accuracy_results <- accuracy_results %>% add_row(tibble_row(method = "Classification tree", Accur = calc_acc))
+#test
+cm <- confusionMatrix(data = y_hat_rpart, reference = factor(test_set$outcome2))
+cm$overall["Accuracy"]
+cm$byClass[c("Sensitivity","Specificity", "Prevalence")]
+#save result
+accuracy_results <- accuracy_results %>% add_row(tibble_row(method = "Classification tree",
+                                                            Accur = cm$overall["Accuracy"],
+                                                            Sens = cm$byClass["Sensitivity"],
+                                                            Spec = cm$byClass["Specificity"]))
 ```
+
+Accuracy drops with this model to 68% as well as the sensitivity to 37% but specificity is up to 89%. With our many predictors we suffer from the so-called *curse of dimesionality* making our neighborhood too large to deliver reasonable accuracy. 
 
 ### 2.3.6 Random forest
 
-```{r rf}
+We will now try to improve on the decision tree model by averaging multiple decision trees in a random forest model. First we need to pick the optimal node size as a tuning parameter running through a sequence from 1 to 25.
+
+```{r rf, warning=FALSE}
 #determine best tuning parameter nodesize
+set.seed(1, sample.kind="Rounding")
 nodesize <- seq(1 ,25, 1)
 acc <- sapply(nodesize, function(ns){
   train(factor(outcome2) ~ ., method = "rf", data = train_set,
@@ -451,34 +491,58 @@ qplot(nodesize, acc)
 which.max(acc)
 ```
 
+The best option seems to be a nodesize of 17
+
 ```{r rf2, warning=FALSE}
 #use that nodesize in the RF prediction
-fit_rf <- randomForest(outcome2 ~ ., data = train_set, nodesize = 9)
-y_hat_rf <- predict(fit_rf, newdata = test_set) 
-y_hat_rf <- ifelse(y_hat_rf > 0.5,1 ,0) %>% factor()
-calc_acc <- confusionMatrix(y_hat_rf, factor(test_set$outcome2))$overall[["Accuracy"]]
-calc_acc
-accuracy_results <- accuracy_results %>% add_row(tibble_row(method = "Random forest", Accur = calc_acc))
+#train using nodesize
+fit_rf <- randomForest(outcome2 ~ ., data = train_set, nodesize = which.max(acc))
+#predict
+p_hat_rf <- predict(fit_rf, newdata = test_set)
+#change predictions from prob to discrete and factorise
+y_hat_rf <- ifelse(p_hat_rf > 0.5,1 ,0) %>% factor()
+#test
+cm <- confusionMatrix(data = y_hat_rf, reference = factor(test_set$outcome2))
+cm$overall["Accuracy"]
+cm$byClass[c("Sensitivity","Specificity", "Prevalence")]
+#save result
+accuracy_results <- accuracy_results %>% add_row(tibble_row(method = "Random forest",
+                                                            Accur = cm$overall["Accuracy"],
+                                                            Sens = cm$byClass["Sensitivity"],
+                                                            Spec = cm$byClass["Specificity"]))
 ```
+
+We've improved our accuracy to 76%, with a sensitivity of 62% and a specificity of 86%. 
 
 ### 2.3.7 Ensemble
 
+As a last measure we will try and get the best from two of the better methods, the KNN model and the random forest model. We will create a simple mean of their probabilities and test against our test set.
+
 ```{r ensemble}
-y_hat_ens <- as.data.frame(as.integer(y_hat_lr))
-y_hat_ens["y_hat_glm"] <- as.integer(y_hat_glm)
-y_hat_ens["y_hat_knn1"] <- as.integer(factor(y_hat_knn1))
-y_hat_ens["y_hat_rpart"] <- as.integer(y_hat_rpart)
-y_hat_ens["y_hat_rf"] <- as.integer(y_hat_rf)
-y_hat_ens$y_hat_ens <- apply(y_hat_ens,1,mean)
-y_hat_ens$y_hat_ens <- ifelse(y_hat_ens$y_hat_ens > 1.5,2 ,1)  
-y_hat_ens$y_hat_ens <- ifelse(y_hat_ens$y_hat_ens == 1,0 ,1) 
-y_hat_ens <- factor(y_hat_ens$y_hat_ens) 
-calc_acc <- mean(y_hat_ens == test_set$outcome2)
-calc_acc
-accuracy_results <- accuracy_results %>% add_row(tibble_row(method = "Ensemble", Accur = calc_acc))
+#ensemble method
+#create dataframe with KNN probs
+p_hat_ens <- as.data.frame(p_hat_knn)
+p_hat_ens["p_hat_rf"] <- p_hat_rf #add random forest probs
+p_hat_ens["mean"] <- (p_hat_ens$p_hat_knn + p_hat_ens$p_hat_rf)/2 #mean out the probs
+p_hat_ens$y_hat_ens <- ifelse(p_hat_ens$mean > 0.5,1 ,0) # convert to 1 / 0
+y_hat_ens <- factor(p_hat_ens$y_hat_ens)  #factorise
+#test
+cm <- confusionMatrix(data = y_hat_ens, reference = factor(test_set$outcome2))
+cm$overall["Accuracy"]
+cm$byClass[c("Sensitivity","Specificity", "Prevalence")]
+#save result
+accuracy_results <- accuracy_results %>% add_row(tibble_row(method = "Ensemble",
+                                                            Accur = cm$overall["Accuracy"],
+                                                            Sens = cm$byClass["Sensitivity"],
+                                                            Spec = cm$byClass["Specificity"]))
 ```
 
+Our accuracy has now changed to 77% with a sensitivity of 65% and a specificity of 86%. 
+
 # 3 Results
+
+Of all the methods used, the K Nearest Neighbour seems to deliver the best of all 3 measures in the confusion matrix.
+We have an accuracy of 79%, sensitivity of 67% and specificity of 87%. The other methods, and even the ensemble method do not seem to be able to improve on this.
 
 ```{r results}
 accuracy_results
@@ -486,11 +550,10 @@ accuracy_results
 
 # 4 Conclusion
 
-prevent over/under training
-regularisation to prevent over-fitting
-could split into validation set and tune the hyper parameters
-becasue we have very little data, comparatively speaking, we could use cross validation
+The model we have developed should be able to predict survival or death of a horse with colic, using the various medical parameters, to less than an 80% accuracy level.  
 
-```{r zzz}
+Because we have very little data from the downloaded set, when compared to other massive datasets, the KNN method we used above seems to deliver the best result. We  have considered cross validation to improve our models by using the tunegrid parameter. This has maximised our accuracy slightly over the other methods.
 
-```
+Future work should include more granularity on the selection of medical parameters. Many of them could possibly be excluded 
+and deliver a better result because they are adding meaningless complexity.
+We could also try clustering the predictors to gain more meaningful insights especially with the classification tree method owing to the fact that most of the predictors are discrete.
